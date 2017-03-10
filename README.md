@@ -1,2 +1,2 @@
 # EECS_662
-MAKING SURE THIS WORKS!
+Repo for all my EECS 662 (Programming Languages) assignments.
