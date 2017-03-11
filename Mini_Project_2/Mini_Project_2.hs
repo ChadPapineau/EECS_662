@@ -4,8 +4,8 @@
 *****	Author: 	Chad Papineau		*****
 *****	KU ID: 		2592463				*****
 *****	Class: 		EECS 662			*****
-*****	Assignment: Mini_Project_2.hs	*****
-*****	Date:		March 16, 2017	    *****
+*****	Assignment:	Mini_Project_2.hs	*****
+*****	Date:		March 16, 2017		*****
 *********************************************
 *********************************************
 -}
