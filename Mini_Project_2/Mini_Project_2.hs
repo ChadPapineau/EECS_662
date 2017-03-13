@@ -58,7 +58,7 @@ data BBAE where
   First :: BBAE -> BBAE
   Rest :: BBAE -> BBAE
   IsEmpty :: BBAE -> BBAE
-  Empty :: BBAE
+  Empty :: BBAE 
   deriving (Show,Eq)
 
 -- Parser
@@ -157,7 +157,70 @@ term = parens lexer expr
        <|> emptyExpr
        <|> printExpr
        <|> seqExpr
-       
+
+
+-- Defining an evaluation function that uses subst
+-- to define interp
+evals :: BBAE -> (Either String BBAE) -- QUESTION 
+evals (Num x) = (Right (Num x))
+evals (Boolean x) = (Right (Boolean x))
+evals (Plus t1 t2) = do
+  t1' <- (evals t1)
+  t2' <- (evals t2)
+  case t1' of
+    (Num v1) -> case t2' of
+                 (Num v2) -> (Right (Num (v1-v2)))
+                 (Boolean _) -> (Left "Type Error in -")
+    (Boolean _) -> (Left "Type Error in -")
+
+evals (Minus t1 t2) = do
+  t1' <- (evals t1)
+  t2' <- (evals t2)
+  case t1' of
+    (Num v1) -> case t2' of
+                 (Num v2) -> (Right (Num (v1+v2)))
+                 (Boolean _) -> (Left "Type Error in +")
+    (Boolean _) -> (Left "Type Error in +")
+
+evals (And t1 t2) = do
+  t1' <- (evals t1)
+  t2' <- (evals t2)
+  case t1' of
+    (Boolean v1) -> case t2' of
+                 (Boolean v2) -> (Right (Boolean (v1 && v2)))
+                 (Num _) -> (Left "Type Error in &&")
+    (Num _) -> (Left "Type Error in &&")
+
+evals (Leq t1 t2) = do
+  t1' <- (evals t1)
+  t2' <- (evals t2)
+  case t1' of
+    (Num v1) -> case t2' of
+                 (Num v2) -> (Right (Boolean (v1 <= v2)))
+                 (Boolean _) -> (Left "Type Error in <=")
+    (Boolean _) -> (Left "Type Error in <=")
+
+evals (IsZero t) = do
+  t' <- (evals t)
+  case t' of
+    (Num v) -> (Right (Boolean (v == 0)))
+    (Boolean _) -> (Left "Type Error in isZero")
+
+subst :: String -> BBAE -> BBAE -> BBAE -- QUESTION
+subst _ _ (Num x) = (Num x)
+subst i v (Plus l r) = (Plus (subst i v l)
+                             (subst i v r))
+subst i v (Minus l r) = (Minus (subst i v l)
+                               (subst i v r))
+subst i v (Bind i' v' b') = if i==i'
+                               then (Bind i' (subst i v v') b')
+                               else (Bind i' (subst i v v')
+                                             (subst i v b'))
+subst i v (Id i') = if i==i'
+                       then v
+                       else (Id i')
+--interps :: String -> (Either String BBAE) -- QUESTION
+
 parseBAE = parseString expr
 
 parseBAEFile = parseFile expr
