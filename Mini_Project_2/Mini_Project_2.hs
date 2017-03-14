@@ -158,13 +158,41 @@ term = parens lexer expr
        <|> printExpr
        <|> seqExpr
 
+subst :: String -> BBAE -> BBAE -> BBAE -- QUESTION
+subst _ _ (Num x) = (Num x)
+subst i v (Plus l r) = (Plus (subst i v l)
+                             (subst i v r))
+subst i v (Minus l r) = (Minus (subst i v l)
+                               (subst i v r))
+subst i v (Bind i' v' b') = if i==i'
+                               then (Bind i' (subst i v v') b')
+                               else (Bind i' (subst i v v')
+                                             (subst i v b'))
+subst i v (Id i') = if i==i'
+                       then v
+                       else (Id i')
 
--- Defining an evaluation function that uses subst
--- to define interp
+-- Defining an evaluation function 'evals' that uses subst
+-- to handle replacement of identifiers with their
+-- values.
+-- Integrate evals with a BBAE parser to define interps.
 evals :: BBAE -> (Either String BBAE) -- QUESTION 
+-- QUESTION (using subst to handle replacement of
+-- identifiers with their values.)
+-- QUESTION (Intigrating evals with a BBAE parser
+-- to define interps :: String -> (Either String BBAE))
 evals (Num x) = (Right (Num x))
 evals (Boolean x) = (Right (Boolean x))
 evals (Plus t1 t2) = do
+  t1' <- (evals t1)
+  t2' <- (evals t2)
+  case t1' of
+    (Num v1) -> case t2' of
+                 (Num v2) -> (Right (Num (v1+v2)))
+                 (Boolean _) -> (Left "Type Error in +")
+    (Boolean _) -> (Left "Type Error in +")
+
+evals (Minus t1 t2) = do
   t1' <- (evals t1)
   t2' <- (evals t2)
   case t1' of
@@ -173,14 +201,15 @@ evals (Plus t1 t2) = do
                  (Boolean _) -> (Left "Type Error in -")
     (Boolean _) -> (Left "Type Error in -")
 
-evals (Minus t1 t2) = do
-  t1' <- (evals t1)
-  t2' <- (evals t2)
-  case t1' of
-    (Num v1) -> case t2' of
-                 (Num v2) -> (Right (Num (v1+v2)))
-                 (Boolean _) -> (Left "Type Error in +")
-    (Boolean _) -> (Left "Type Error in +")
+-- QUESTION (evals for Bind, Id, Seq, Print, etc...)
+-- QUESTION (The below Bind function is what is given
+-- in class ... do we want to do a 'do' or 'let'? Is 
+-- v/v1 substitutingfor 'a'?)
+--evals (Bind i a s) -> case (evals a) of
+--                       (Left e) -> (Left e)
+--                       (Right v1) -> (evals (subst (i v s)))
+
+--evals (Id n) -> (Left "Undefined Variable")
 
 evals (And t1 t2) = do
   t1' <- (evals t1)
@@ -206,20 +235,42 @@ evals (IsZero t) = do
     (Num v) -> (Right (Boolean (v == 0)))
     (Boolean _) -> (Left "Type Error in isZero")
 
-subst :: String -> BBAE -> BBAE -> BBAE -- QUESTION
-subst _ _ (Num x) = (Num x)
-subst i v (Plus l r) = (Plus (subst i v l)
-                             (subst i v r))
-subst i v (Minus l r) = (Minus (subst i v l)
-                               (subst i v r))
-subst i v (Bind i' v' b') = if i==i'
-                               then (Bind i' (subst i v v') b')
-                               else (Bind i' (subst i v v')
-                                             (subst i v b'))
-subst i v (Id i') = if i==i'
-                       then v
-                       else (Id i')
+
 --interps :: String -> (Either String BBAE) -- QUESTION
+
+-- Defining an evalutaion function 'eval' that uses an environment
+-- to implement replacement of identifiers with their values.
+-- Integrate eval with a BBAE parser to define interp.
+type Env = [(String,BBAE)]
+eval :: Env -> BBAE -> (Either String BBAE)
+eval env (Num x) = (Right (Num x))
+-- QUESTION (Is this right, especially the 'Bind' & 'Id' function?
+-- Need help explaining exactly what said funcs are doing)
+eval env (Plus l r) = let (Right (Num l')) = (eval env l)
+                          (Right (Num r')) = (eval env r)
+                      in (Right (Num (l'+r')))
+
+eval env (Minus l r) = let (Right (Num l')) = (eval env l)
+                           (Right (Num r')) = (eval env r)
+                       in (Right (Num (l'-r')))
+
+eval env (Bind i v b) = let (Right v') = (eval env v)
+                        in (eval ((i,v'):env)) b
+
+eval env (Id id) = case (lookup id env) of
+                    Just x -> (Right x)
+                    Nothing -> error "Variable not found"
+
+eval env (Boolean b) = (Right (Boolean b))
+
+eval env (And l r) = let (Right (Boolean l')) = (eval env l)
+                         (Right (Boolean r')) = (eval env r)
+                     in (Right (Boolean (l' && r')))
+
+eval env (IsZero v) = let (Right (Num v')) = (eval env v)
+                      in (Right (Boolean (v' == 0)))
+
+--interp :: String -> (Either String BBAE)
 
 parseBAE = parseString expr
 
