@@ -31,6 +31,8 @@ import Text.ParserCombinators.Parsec.Token
 -- Imports for PLIH
 import ParserUtils
 
+import System.IO.Unsafe
+
 --
 -- Simple caculator with variables extended Booleans and both static and
 -- dynamic type checking.
@@ -158,8 +160,9 @@ term = parens lexer expr
        <|> printExpr
        <|> seqExpr
 
-subst :: String -> BBAE -> BBAE -> BBAE -- QUESTION
+subst :: String -> BBAE -> BBAE -> BBAE
 subst _ _ (Num x) = (Num x)
+subst _ _ (Boolean b) = (Boolean b)
 subst i v (Plus l r) = (Plus (subst i v l)
                              (subst i v r))
 subst i v (Minus l r) = (Minus (subst i v l)
@@ -176,11 +179,7 @@ subst i v (Id i') = if i==i'
 -- to handle replacement of identifiers with their
 -- values.
 -- Integrate evals with a BBAE parser to define interps.
-evals :: BBAE -> (Either String BBAE) -- QUESTION 
--- QUESTION (using subst to handle replacement of
--- identifiers with their values.)
--- QUESTION (Intigrating evals with a BBAE parser
--- to define interps :: String -> (Either String BBAE))
+evals :: BBAE -> (Either String BBAE)
 evals (Num x) = (Right (Num x))
 evals (Boolean x) = (Right (Boolean x))
 evals (Plus t1 t2) = do
@@ -201,15 +200,11 @@ evals (Minus t1 t2) = do
                  (Boolean _) -> (Left "Type Error in -")
     (Boolean _) -> (Left "Type Error in -")
 
--- QUESTION (evals for Bind, Id, Seq, Print, etc...)
--- QUESTION (The below Bind function is what is given
--- in class ... do we want to do a 'do' or 'let'? Is 
--- v/v1 substitutingfor 'a'?)
---evals (Bind i a s) -> case (evals a) of
---                       (Left e) -> (Left e)
---                       (Right v1) -> (evals (subst (i v s)))
+evals (Bind i a s) = case (evals a) of
+                       (Left e) -> (Left e)
+                       (Right v) -> (evals (subst i v s))
 
---evals (Id n) -> (Left "Undefined Variable")
+evals (Id n) = (Left "Undefined Variable")
 
 evals (And t1 t2) = do
   t1' <- (evals t1)
@@ -236,7 +231,9 @@ evals (IsZero t) = do
     (Boolean _) -> (Left "Type Error in isZero")
 
 
---interps :: String -> (Either String BBAE) -- QUESTION
+interps :: String -> (Either String BBAE)
+
+interps = evals . parseBBAE
 
 -- Defining an evalutaion function 'eval' that uses an environment
 -- to implement replacement of identifiers with their values.
@@ -244,8 +241,6 @@ evals (IsZero t) = do
 type Env = [(String,BBAE)]
 eval :: Env -> BBAE -> (Either String BBAE)
 eval env (Num x) = (Right (Num x))
--- QUESTION (Is this right, especially the 'Bind' & 'Id' function?
--- Need help explaining exactly what said funcs are doing)
 eval env (Plus l r) = let (Right (Num l')) = (eval env l)
                           (Right (Num r')) = (eval env r)
                       in (Right (Num (l'+r')))
@@ -267,10 +262,42 @@ eval env (And l r) = let (Right (Boolean l')) = (eval env l)
                          (Right (Boolean r')) = (eval env r)
                      in (Right (Boolean (l' && r')))
 
+eval env (Leq l r) = let (Right (Boolean l')) = (eval env l)
+                         (Right (Boolean r')) = (eval env r)
+                     in (Right (Boolean (l' <= r')))
+
 eval env (IsZero v) = let (Right (Num v')) = (eval env v)
                       in (Right (Boolean (v' == 0)))
 
---interp :: String -> (Either String BBAE)
+eval env (Seq l r) = let l' = (eval env l)
+                     in case l' of
+                      (Left m) -> l'
+                      (Right _) -> let r' = (eval env r)
+                                   in case r' of
+                                     (Left m') -> (Left "Error in the Sequence")
+                                     (Right _) -> r'
+
+eval env (If c t e) = let (Right (Num c')) = (eval env c)
+                      in if c'==0 then (eval env t) else (eval env e)
+
+eval env (Print x) = (seq (unsafePerformIO (print (eval env x)))(Right (Num 0)))
+
+eval env (Cons x y) = let (Right x') = (eval env x)
+                          (Right y') = (eval env y)
+                      in (Right (Cons x' y'))
+
+eval env (First (Cons x y)) = (Right x)
+
+eval env (Rest (Cons x y)) = (Right y)
+
+eval env (IsEmpty Empty) = (Right (Boolean True))
+eval env (IsEmpty (Cons _ _)) = (Right (Boolean False))
+
+eval env Empty = (Right Empty)
+
+interp :: String -> (Either String BBAE)
+
+interp x = eval [] (parseBBAE x)
 
 parseBAE = parseString expr
 
