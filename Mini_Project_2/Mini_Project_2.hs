@@ -175,10 +175,6 @@ subst i v (Id i') = if i==i'
                        then v
                        else (Id i')
 
--- Defining an evaluation function 'evals' that uses subst
--- to handle replacement of identifiers with their
--- values.
--- Integrate evals with a BBAE parser to define interps.
 evals :: BBAE -> (Either String BBAE)
 evals (Num x) = (Right (Num x))
 evals (Boolean x) = (Right (Boolean x))
@@ -235,9 +231,6 @@ interps :: String -> (Either String BBAE)
 
 interps = evals . parseBBAE
 
--- Defining an evalutaion function 'eval' that uses an environment
--- to implement replacement of identifiers with their values.
--- Integrate eval with a BBAE parser to define interp.
 type Env = [(String,BBAE)]
 eval :: Env -> BBAE -> (Either String BBAE)
 eval env (Num x) = (Right (Num x))
