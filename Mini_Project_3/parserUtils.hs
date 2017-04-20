@@ -31,7 +31,9 @@ languageDef =
                               , "first"
                               , "rest"
                               , "isEmpty"
-                              , "empty" ]
+                              , "empty"
+                              , "inc"
+                              , "dec" ]
             , reservedOpNames = [ "+","-","*","/","&&","||","<=","="]
             }
   

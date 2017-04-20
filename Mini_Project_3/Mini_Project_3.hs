@@ -31,13 +31,10 @@ import Text.ParserCombinators.Parsec.Token
 -- Imports for PLIH
 import ParserUtils
 
---
 -- Project utilities for developing CFAE and CFBAE
 -- interpreters.
---
--- Author: Perry Alexander
--- Date: 6 April 2017
---
+
+-- TESTING: (app (lambda n in (app (lambda f in (app (lambda n in (app f 3)) 1)) (lambda x in x + n))) 5)
 
 -- CFAE AST Definition
 
@@ -52,6 +49,17 @@ data CFAE where
   Id :: String -> CFAE
   If :: CFAE -> CFAE -> CFAE -> CFAE
   deriving (Show,Eq)
+
+-- Grammar for this language that's called CFAE.
+--CFAE ::= number |
+--         id |
+--         CFAE * CFAE |
+--         CFAE - CFAE |
+--         CFAE * CFAE |
+--         CFAE / CFAE |
+--         lambda id in CFAE |
+--         app CFAE CFAE |
+--         if0 CFAE CFAE CFAE
 
 -- Parser
 
@@ -101,13 +109,72 @@ term = parens lexer expr
        <|> ifExpr
        <|> lambdaExpr
        <|> appExpr
-             
+
+type EnvD = [(String,CFAE)]
+evalDynCFAE :: EnvD -> CFAE -> CFAE
+evalDynCFAE envD (Num x) = (Num x)
+evalDynCFAE envD (Plus l r) = let (Num l') = (evalDynCFAE envD l)
+                                  (Num r') = (evalDynCFAE envD r)
+                              in (Num (l'+r'))
+evalDynCFAE envD (Minus l r) = let (Num l') = (evalDynCFAE envD l)
+                                   (Num r') = (evalDynCFAE envD r)
+                               in (Num (l'-r'))
+evalDynCFAE envD (Mult l r) = let (Num l') = (evalDynCFAE envD l)
+                                  (Num r') = (evalDynCFAE envD r)
+                              in (Num (l'*r'))
+evalDynCFAE envD (Div l r) = let (Num l') = (evalDynCFAE envD l)
+                                 (Num r') = (evalDynCFAE envD r)
+                             in (Num (div l' r'))
+evalDynCFAE envD (Lambda i b) = (Lambda i b)
+evalDynCFAE envD (App f a) = let (Lambda i b) = (evalDynCFAE envD f)
+                                 a' = (evalDynCFAE envD a)
+                             in evalDynCFAE ((i,a'):envD) b
+evalDynCFAE envD (Id id) = case (lookup id envD) of
+                            Just x -> x
+                            Nothing -> error "Variable not found"
+evalDynCFAE envD (If c t e) = let (Num c') = (evalDynCFAE envD c)
+                              in if c'==0 then (evalDynCFAE envD t) else (evalDynCFAE envD e)
+
+interpDynCFAE :: String -> CFAE
+interpDynCFAE = (evalDynCFAE []) . parseCFAE
+
 -- Parser invocation
 
 parseCFAE = parseString expr
 
 parseCFAEFile = parseFile expr
 
+type EnvS =[(String,CFAEValue)]
+data CFAEValue where
+  NumV :: Int -> CFAEValue
+  ClosureV :: String -> CFAE -> EnvS -> CFAEValue
+  deriving(Show,Eq)
+evalStatCFAE :: EnvS -> CFAE -> CFAEValue
+evalStatCFAE envS (Num x) = (NumV x)
+evalStatCFAE envS (Plus l r) = let (NumV l') = (evalStatCFAE envS l)
+                                   (NumV r') = (evalStatCFAE envS r)
+                               in (NumV (l'+r'))
+evalStatCFAE envS (Minus l r) = let (NumV l') = (evalStatCFAE envS l)
+                                    (NumV r') = (evalStatCFAE envS r)
+                                in (NumV (l'-r'))
+evalStatCFAE envS (Mult l r) = let (NumV l') = (evalStatCFAE envS l)
+                                   (NumV r') = (evalStatCFAE envS r)
+                               in (NumV (l'*r'))
+evalStatCFAE envS (Div l r) = let (NumV l') = (evalStatCFAE envS l)
+                                  (NumV r') = (evalStatCFAE envS r)
+                              in (NumV (div l' r'))
+evalStatCFAE envS (Lambda i b) = (ClosureV i b envS)
+evalStatCFAE envS (App f a) = let (ClosureV i b e) = (evalStatCFAE envS f)
+                                  a' = (evalStatCFAE envS a)
+                              in evalStatCFAE ((i,a'):e) b
+evalStatCFAE envS (Id id) = case (lookup id envS) of
+                             Just x -> x
+                             Nothing -> error "Variable not found"
+evalStatCFAE envS (If c t e) = let (NumV c') = (evalStatCFAE envS c)
+                               in if c'==0 then (evalStatCFAE envS t) else (evalStatCFAE envS e)
+
+interpStatCFAE :: String -> CFAEValue
+interpStatCFAE = (evalStatCFAE []) . parseCFAE
 
 -- CFBAE Parser
 
@@ -124,6 +191,8 @@ data CFBAE where
   AppX :: CFBAE -> CFBAE -> CFBAE
   IdX :: String -> CFBAE
   IfX :: CFBAE -> CFBAE -> CFBAE -> CFBAE
+  IncX :: CFBAE -> CFBAE
+  DecX :: CFBAE -> CFBAE
   deriving (Show,Eq)
 
 -- Parser
@@ -175,8 +244,17 @@ ifExprX = do reserved lexer "if"
              reserved lexer "else"
              e <- exprX
              return (IfX c t e)
-            
-             
+
+incExprX :: Parser CFBAE
+incExprX = do reserved lexer "inc"
+              i <- exprX
+              return (IncX i)
+
+decExprX :: Parser CFBAE
+decExprX = do reserved lexer "dec"
+              d <- exprX
+              return (DecX d)
+
 termX = parens lexer exprX
        <|> numExprX
        <|> identExprX
@@ -184,11 +262,29 @@ termX = parens lexer exprX
        <|> ifExprX
        <|> lambdaExprX
        <|> appExprX
+       <|> incExprX
+       <|> decExprX
              
+elabCFBAE :: CFBAE -> CFAE
+elabCFBAE (NumX x) = (Num x)
+elabCFBAE (PlusX l r) = (Plus (elabCFBAE l) (elabCFBAE r))
+elabCFBAE (MinusX l r) = (Minus (elabCFBAE l) (elabCFBAE r))
+elabCFBAE (MultX l r) = (Mult (elabCFBAE l) (elabCFBAE r))
+elabCFBAE (DivX l r) = (Div (elabCFBAE l) (elabCFBAE r))
+elabCFBAE (BindX i v b) = (App (Lambda i (elabCFBAE b)) (elabCFBAE v))
+elabCFBAE (LambdaX x f) = (Lambda x (elabCFBAE f))
+elabCFBAE (AppX f a) = (App (elabCFBAE f) (elabCFBAE a))
+elabCFBAE (IdX id) = (Id id)
+elabCFBAE (IfX c t e) = (If (elabCFBAE c) (elabCFBAE t) (elabCFBAE e))
+elabCFBAE (IncX i) = (Plus (elabCFBAE i) (Num 1))
+elabCFBAE (DecX d) = (Minus (elabCFBAE d) (Num 1))
+
+evalCFBAE :: EnvS -> CFBAE -> CFAEValue
+evalCFBAE env state = (evalStatCFAE env (elabCFBAE state))
+interpCFBAE = (evalCFBAE []) . parseCFBAE
+
 -- Parser invocation
 
 parseCFBAE = parseString exprX
 
 parseCFBAEFile = parseFile exprX
-
-
