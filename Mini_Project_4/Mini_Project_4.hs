@@ -335,6 +335,11 @@ typeof cont (Div l r) = let l' = (typeof cont l)
                                   _ -> TNum
                            else (error "Type Mismatch in /")
 
+--typeof cont (And l r) = if (typeof cont l)==TBool && (typeof cont r)==TBool
+--                        then TBool
+--                        else (error "Type Mismatch in &&")
+
+-- QUESTION: Does this need to be l'==TBool instead???
 typeof cont (And l r) = let l' = (typeof cont l)
                             r' = (typeof cont r)
                         in if (l'==TNum && r'==TNum)
@@ -378,8 +383,13 @@ typeof cont (IsZero v) = let v' = (typeof cont v)
                             then TBool
                             else (error "Type Mismatch in IsZero")
 
+-- QUESTION: What to do here???
 --typeof cont (Lambda x D b) = let R = typeof ((x,D):cont) b
 --                             in D :->: R
+
+-- QUESTION: This way works... But why???
+--typeof cont (Lambda x d b) = let r = typeof ((x,d):cont) b
+--                             in d :->: r
 
 typeof cont (App x y) = let tyY = (typeof cont y)
                         in case typeof cont x of
