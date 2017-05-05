@@ -62,11 +62,11 @@ tokenDef =
                                     , "then"
                                     , "else"
                                     , "isZero"
-                                    , "true"
-                                    , "false"
                                     , "app"
                                     , "Num"
                                     , "Bool"
+                                    , "true"
+                                    , "false"
                                     , "fix" ]
             , Token.reservedOpNames = [ "+","-","*","/","&&","||","<=","=",":","->"]
             }
@@ -164,6 +164,40 @@ term = parens expr
        <|> appExpr
        <|> fixExpr
 
+-- Type parser
+
+ty = buildExpressionParser tyoperators tyTerm
+
+tyoperators = [ [Infix (reservedOp "->" >> return (:->: )) AssocLeft ] ]
+
+tyTerm :: Parser TFBAE
+tyTerm = parens ty <|> tyNat <|> tyBool
+
+tyNat :: Parser TFBAE
+tyNat = do reserved "Nat"
+           return TNum
+
+tyBool :: Parser TFBAE
+tyBool = do reserved "Bool"
+            return TBool
+
+-- Parser invocation
+
+parseString p str =
+  case parse p "" str of
+    Left e -> error $ show e
+    Right r -> r
+
+parseFBAE = parseString expr
+
+parseFile p file =
+  do program <- readFile file
+     case parse p "" program of
+       Left e -> print e >> fail "parse error"
+       Right r -> return r
+
+parseFBAEFile = parseFile expr
+
 type Env = [(String,FBAEValue)]
 type Cont = [(String,TFBAE)]
 
@@ -173,95 +207,90 @@ eval env (Num x) = (NumV x)
 
 eval env (Boolean b) = (BooleanV b)
 
-eval env (Plus l r) = let (l') = (eval env l)
-                          (r') = (eval env r)
+eval env (Plus l r) = let l' = (eval env l)
+                          r' = (eval env r)
                       in case l' of 
-                           (NumV ll) -> case r' of
-                                          (NumV rr) -> (NumV (ll+rr))
+                           (NumV v1) -> case r' of
+                                          (NumV v2) -> (NumV (v1+v2))
                                           (BooleanV _) -> (error "Type Mismatch in +")
                            (BooleanV _) -> (error "Type Mismatch in +")
 
-eval env (Minus l r) = let (l') = (eval env l)
-                           (r') = (eval env r)
+eval env (Minus l r) = let l' = (eval env l)
+                           r' = (eval env r)
                        in case l' of 
-                            (NumV ll) -> case r' of
-                                           (NumV rr) -> (NumV (ll-rr))
+                            (NumV v1) -> case r' of
+                                           (NumV v2) -> (NumV (v1-v2))
                                            (BooleanV _) -> (error "Type Mismatch in -")
                             (BooleanV _) -> (error "Type Mismatch in -")
 
-eval env (Mult l r) = let (l') = (eval env l)
-                          (r') = (eval env r)
+eval env (Mult l r) = let l' = (eval env l)
+                          r' = (eval env r)
                       in case l' of 
-                           (NumV ll) -> case r' of
-                                          (NumV rr) -> (NumV (ll*rr))
+                           (NumV v1) -> case r' of
+                                          (NumV v2) -> (NumV (v1*v2))
                                           (BooleanV _) -> (error "Type Mismatch in *")
                            (BooleanV _) -> (error "Type Mismatch in *")
 
-eval env (Div l r) = let (l') = (eval env l)
-                         (r') = (eval env r)
+eval env (Div l r) = let l' = (eval env l)
+                         r' = (eval env r)
                      in case l' of 
-                          (NumV ll) -> case r' of
-                                         (NumV rr) -> (NumV (div ll rr))
+                          (NumV v1) -> case r' of
+                                         (NumV v2) -> (NumV (div v1 v2))
                                          (BooleanV _) -> (error "Type Mismatch in /")
                           (BooleanV _) -> (error "Type Mismatch in /")
 
-eval env (And l r) = let (l') = (eval env l)
-                         (r') = (eval env r)
+eval env (And l r) = let l' = (eval env l)
+                         r' = (eval env r)
                      in case l' of 
-                          (BooleanV ll) -> case r' of
-                                             (BooleanV rr) -> (BooleanV (ll&&rr))
+                          (BooleanV v1) -> case r' of
+                                             (BooleanV v2) -> (BooleanV (v1&&v2))
                                              (NumV _) -> (error "Type Mismatch in &&")
                           (NumV _) -> (error "Type Mismatch in &&")
 
-eval env (Or l r) = let (l') = (eval env l)
-                        (r') = (eval env r)
+eval env (Or l r) = let l' = (eval env l)
+                        r' = (eval env r)
                     in case l' of 
-                         (BooleanV ll) -> case r' of
-                                            (BooleanV rr) -> (BooleanV (ll||rr))
+                         (BooleanV v1) -> case r' of
+                                            (BooleanV v2) -> (BooleanV (v1||v2))
                                             (NumV _) -> (error "Type Mismatch in ||")
                          (NumV _) -> (error "Type Mismatch in ||")
 
-eval env (Leq l r) = let (l') = (eval env l)
-                         (r') = (eval env r)
+eval env (Leq l r) = let l' = (eval env l)
+                         r' = (eval env r)
                      in case l' of 
-                          (BooleanV ll) -> case r' of
-                                             (BooleanV rr) -> (BooleanV (ll<=rr))
+                          (NumV v1) -> case r' of
+                                             (NumV v2) -> (BooleanV (v1<=v2))
                                              (NumV _) -> (error "Type Mismatch in <=")
                           (NumV _) -> (error "Type Mismatch in <=")
 
-eval env (If c t e) = let (c') = (eval env c)
+eval env (If c t e) = let c' = (eval env c)
                       in case c' of
-                           (NumV cc) -> (error "Type Mismatch in if")
-                           (BooleanV cc) -> if (cc)
+                           (NumV v1) -> (error "Type Mismatch in if")
+                           (BooleanV v1) -> if (v1)
                                             then (eval env t)
                                             else (eval env e)
 
--- QUESTION: What's wrong with this error handling *** replaced '_' with 'Nothing'???
--- QUESTION: Should I replace all the '_' with 'Nothing'???
--- RUNNING: interp "(if (isZero 1) then 1 else x * (app fact x-1))"
--- QUESTION: After reviewing my notes do I need to use helper functions???
 eval env (Id id) = case (lookup id env) of
                      Just x -> (x)
                      Nothing -> (error "Variable Not Found!")
 
-eval env (Bind i v b) = let (v') = (eval env v)
-                            (b') = (eval ((i,v'):env) b)
-                        in (b')
+eval env (Bind i v b) = let v' = (eval env v)
+                            b' = (eval ((i,v'):env) b)
+                        in b'
 
-eval env (IsZero v) = let (v') = (eval env v)
+eval env (IsZero v) = let v' = (eval env v)
                       in case v' of
-                           (NumV vv) -> (BooleanV (vv==0))
+                           (NumV v1) -> (BooleanV (v1==0))
                            _ -> (error "Type Mismatch in IsZero")
 
 eval env (Lambda i t b) = (ClosureV i b env)
 
-eval env (App f a) = let (f') = (eval env f)
-                         (a') = (eval env a)
+eval env (App f a) = let f' = (eval env f)
+                         a' = (eval env a)
                      in case f' of
                           (ClosureV i b env') -> (eval ( (i,a'):env' ) b)
                           _ -> (error "Type Mismatch in App")
 
--- DUMB QUESTION: How come the environmetn 'e' doesn't have to be 'env'???
 eval env (Fix f) = let (ClosureV i b e) = (eval env f) in
                     eval e (subst i (Fix (Lambda i TNum b)) b)
 
@@ -299,9 +328,9 @@ subst i v (IsZero x) = (IsZero (subst i v x))
 
 subst i v (Lambda x t b) = (Lambda x t (subst i v b))
 
-subst i v (App f a) = (App f (subst i v a))
+subst i v (App f a) = (App (subst i v f) (subst i v a))
 
-subst i v (Fix f) = (Fix (subst i v f)) -- QUESTION: Is this right???
+subst i v (Fix f) = (Fix (subst i v f))
 
 typeof :: Cont -> FBAE -> TFBAE
 
@@ -335,41 +364,32 @@ typeof cont (Div l r) = let l' = (typeof cont l)
                                   _ -> TNum
                            else (error "Type Mismatch in /")
 
---typeof cont (And l r) = if (typeof cont l)==TBool && (typeof cont r)==TBool
---                        then TBool
---                        else (error "Type Mismatch in &&")
-
--- QUESTION: Does this need to be l'==TBool instead???
 typeof cont (And l r) = let l' = (typeof cont l)
                             r' = (typeof cont r)
-                        in if (l'==TNum && r'==TNum)
-                           then TNum
+                        in if (l'==TBool && r'==TBool)
+                           then TBool
                            else error "Type Mismatch in &&"
 
 typeof cont (Or l r) = let l' = (typeof cont l)
                            r' = (typeof cont r)
-                       in if (l'==TNum && r'==TNum)
-                          then TNum
+                       in if (l'==TBool && r'==TBool)
+                          then TBool
                           else error "Type Mismatch in ||"
 
 typeof cont (Leq l r) = let l' = (typeof cont l)
                             r' = (typeof cont r)
                         in case l' of
                              TNum -> case r' of
-                                       TNum -> TBool
+                                       TNum -> TNum
                                        _ -> (error "Type Mismatch in <=")
                              TBool -> (error "Type Mismatch in <=")
 
-typeof cont (If c t e) = if (typeof cont c)==TNum && (typeof cont t)==(typeof cont e)
-                         then (typeof cont t)
-                         else (error "Type Mismatch in if")
-
---typeof cont (If c t e) = let c' = (typeof cont c)
---                             t' = (typeof cont t)
---                             e' = (typeof cont e)
---                         in if (c'==TBool && t'==e')
---                            then (t')
---                            else (error "Type Mismatch in if")
+typeof cont (If c t e) = let c' = (typeof cont c)
+                             t' = (typeof cont t)
+                             e' = (typeof cont e)
+                         in if (c'==TBool && t'==e')
+                            then (t')
+                            else (error "Type Mismatch in if")
 
 typeof cont (Id id) = case (lookup id cont) of
                             Just x -> (x)
@@ -383,59 +403,24 @@ typeof cont (IsZero v) = let v' = (typeof cont v)
                             then TBool
                             else (error "Type Mismatch in IsZero")
 
--- QUESTION: What to do here???
---typeof cont (Lambda x D b) = let R = typeof ((x,D):cont) b
---                             in D :->: R
-
--- QUESTION: This way works... But why???
---typeof cont (Lambda x d b) = let r = typeof ((x,d):cont) b
---                             in d :->: r
+typeof cont (Lambda x d b) = let r = typeof ((x,d):cont) b
+                             in d :->: r
 
 typeof cont (App x y) = let tyY = (typeof cont y)
                         in case typeof cont x of
-                             tyXd :->: tyXr ->
-                               if tyXd==tyY
-                               then tyXr
-                               else (error "Type Mismatch in app")
+                             tyXd :->: tyXr -> if tyXd==tyY
+                                               then tyXr
+                                               else (error "Type Mismatch in app")
                              _ -> (error "First argument not lambda in app")
 
--- QUESTION: What to do here???
---typeof cont (Fix f) =
+typeof cont (Fix f) = let (d :->: r) = typeof cont f
+                      in r
 
 interp :: String -> FBAEValue
 interp x = eval [] (parseFBAE x)
 
--- Type parser
-
-ty = buildExpressionParser tyoperators tyTerm
-
-tyoperators = [ [Infix (reservedOp "->" >> return (:->: )) AssocLeft ] ]
-
-tyTerm :: Parser TFBAE
-tyTerm = parens ty <|> tyNat <|> tyBool
-
-tyNat :: Parser TFBAE
-tyNat = do reserved "Nat"
-           return TNum
-
-tyBool :: Parser TFBAE
-tyBool = do reserved "Bool"
-            return TBool
-
--- Parser invocation
-
-parseString p str =
-  case parse p "" str of
-    Left e -> error $ show e
-    Right r -> r
-
-parseFBAE = parseString expr
-
-parseFile p file =
-  do program <- readFile file
-     case parse p "" program of
-       Left e -> print e >> fail "parse error"
-       Right r -> return r
-
-parseFBAEFile = parseFile expr
-
+interpTyped :: String -> FBAEValue
+interpTyped e = let p=(parseFBAE e) 
+                in case (typeof [] p) of
+                     _ -> (eval [] p)
+--                     --m -> (error m)
